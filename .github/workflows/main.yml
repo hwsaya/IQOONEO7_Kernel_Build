@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
     inputs:
       manifest_branch:
-        description: '谷歌 GKI 分支 (请保持默认以精准匹配 5.10.218)'
+        description: '谷歌 GKI 分支'
         required: true
         default: 'android12-5.10-2024-08'
 
@@ -12,16 +12,12 @@ jobs:
   build-kernel:
     runs-on: ubuntu-latest
     steps:
-      - name: 清理磁盘空间
-        uses: easimon/maximize-build-space@master
-        with:
-          root-reserve-mb: 8192
-          swap-size-mb: 8192
-          remove-dotnet: 'true'
-          remove-android: 'true'
-          remove-haskell: 'true'
-          remove-codeql: 'true'
-          remove-docker-images: 'true'
+      - name: 强力清理磁盘空间
+        run: |
+          sudo docker image prune -a -f
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /usr/local/share/powershell /usr/share/swift /usr/local/.ghcup /opt/pipx
+          sudo apt-get clean
+          df -h
 
       - name: 安装依赖工具
         run: |
@@ -32,17 +28,18 @@ jobs:
           chmod a+rx ~/.bin/repo
           echo "$HOME/.bin" >> $GITHUB_PATH
 
-      - name: 初始化并同步谷歌 GKI 源码
+      - name: 初始化并同步源码 (在 /mnt 编译)
         run: |
-          mkdir kernel_workspace && cd kernel_workspace
+          sudo chown $USER /mnt
+          mkdir -p /mnt/kernel_workspace && cd /mnt/kernel_workspace
           git config --global user.name "GitHub Action"
           git config --global user.email "action@github.com"
           repo init -u https://android.googlesource.com/kernel/manifest -b ${{ github.event.inputs.manifest_branch }} --depth=1
           repo sync -j$(nproc) --no-clone-bundle --no-tags
 
-      - name: 注入用户指定的内核配置
+      - name: 注入内核配置
         run: |
-          cd kernel_workspace/common
+          cd /mnt/kernel_workspace/common
           cat <<EOF >> arch/arm64/configs/gki_defconfig
           CONFIG_BPF_STREAM_PARSER=y
           CONFIG_NETFILTER_XT_MATCH_ADDRTYPE=y
@@ -69,25 +66,24 @@ jobs:
           CONFIG_IP6_NF_TARGET_MASQUERADE=y
           EOF
 
-      - name: 编译内核
+      - name: 编译内核 (使用 Bazel)
         run: |
-          cd kernel_workspace
+          cd /mnt/kernel_workspace
           LTO=thin tools/bazel build //common:kernel_aarch64 --verbose_failures
 
       - name: 打包 AnyKernel3
         run: |
           git clone https://github.com/osm0sis/AnyKernel3.git
           rm -rf AnyKernel3/.git
-          cp kernel_workspace/bazel-bin/common/kernel_aarch64/Image AnyKernel3/
+          cp /mnt/kernel_workspace/bazel-bin/common/kernel_aarch64/Image AnyKernel3/
           cd AnyKernel3
-          sed -i 's/kernel.string=.*/kernel.string=Pure GKI 5.10.218 with ipset (No Root)/' anykernel.sh
+          sed -i 's/kernel.string=.*/kernel.string=Pure GKI 5.10.218 No-Root/' anykernel.sh
           sed -i 's/do.devicecheck=1/do.devicecheck=0/' anykernel.sh
           sed -i 's/block=.*/block=boot;/' anykernel.sh
           zip -r9 ../AnyKernel3-GKI-5.10.218.zip *
 
-      - name: 提取并上传产物
+      - name: 上传产物
         uses: actions/upload-artifact@v4
         with:
           name: AnyKernel3-GKI-5.10.218-NoRoot
           path: AnyKernel3-GKI-5.10.218.zip
-
