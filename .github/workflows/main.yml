@@ -19,14 +19,22 @@ jobs:
           sudo apt-get clean
           df -h
 
-      - name: 安装依赖工具
+      - name: 安装依赖工具 (包含 ccache)
         run: |
           sudo apt-get update
-          sudo apt-get install -y build-essential curl git python3 rsync zip
+          sudo apt-get install -y build-essential curl git python3 rsync zip ccache
           mkdir -p ~/.bin
           curl https://storage.googleapis.com/git-repo-downloads/repo > ~/.bin/repo
           chmod a+rx ~/.bin/repo
           echo "$HOME/.bin" >> $GITHUB_PATH
+
+      - name: 设置 CCache 编译缓存
+        uses: actions/cache@v4
+        with:
+          path: ~/.ccache
+          key: ccache-gki-5.10-${{ github.run_id }}
+          restore-keys: |
+            ccache-gki-5.10-
 
       - name: 初始化并同步源码
         run: |
@@ -68,11 +76,22 @@ jobs:
           
           sed -i 's/check_defconfig//g' build.config.gki
           sed -i 's/check_defconfig//g' build.config.common
+          
+          # 让编译系统识别并使用 ccache
+          echo 'export CC="ccache clang"' >> build.config.common
 
       - name: 编译内核
         run: |
+          export CCACHE_DIR=~/.ccache
+          export CCACHE_MAXSIZE=3G
+          ccache -M 3G
+          ccache -z
+          
           cd /mnt/kernel_workspace
           LTO=thin BUILD_CONFIG=common/build.config.gki.aarch64 build/build.sh
+          
+          echo "=== CCache 命中统计 ==="
+          ccache -s
 
       - name: 打包 AnyKernel3
         run: |
@@ -84,8 +103,9 @@ jobs:
           
           cd AnyKernel3
           sed -i 's/kernel.string=.*/kernel.string=Pure GKI 5.10.218 No-Root/' anykernel.sh
-          sed -i 's/do.devicecheck=1/do.devicecheck=0/' anykernel.sh
-          sed -i 's/block=.*/block=boot;/' anykernel.sh
+          sed -i 's/^do.devicecheck=.*/do.devicecheck=0/' anykernel.sh
+          sed -i 's|^block=.*|block=/dev/block/by-name/boot;|' anykernel.sh
+          sed -i 's/^is_slot_device=.*/is_slot_device=auto;/' anykernel.sh
           zip -r9 ../AnyKernel3-GKI-5.10.218.zip *
 
       - name: 提取并上传产物
