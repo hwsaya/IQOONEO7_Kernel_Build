@@ -66,6 +66,9 @@ jobs:
           CONFIG_IP6_NF_TARGET_MASQUERADE=y
           EOF
 
+          sed -i 's/check_defconfig//g' build.config.gki
+          sed -i 's/check_defconfig//g' build.config.common
+
       - name: 编译内核
         run: |
           cd /mnt/kernel_workspace
