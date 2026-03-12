@@ -88,6 +88,9 @@ jobs:
           CONFIG_XPS=y
           CONFIG_RPS=y
           EOF
+
+          printf 'net/ipv4/tcp_bic.ko\nnet/ipv4/tcp_westwood.ko\nnet/ipv4/tcp_htcp.ko\n' \
+            >> android/gki_aarch64_modules
           
           sed -i 's/check_defconfig//g' build.config.gki
           sed -i 's/check_defconfig//g' build.config.common
