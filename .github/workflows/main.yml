@@ -6,7 +6,7 @@ on:
       manifest_branch:
         description: '谷歌 GKI 分支'
         required: true
-        default: 'android12-5.10-2024-08'
+        default: 'common-android12-5.10'
 
 jobs:
   build-kernel:
@@ -66,10 +66,12 @@ jobs:
           CONFIG_IP6_NF_TARGET_MASQUERADE=y
           EOF
 
-      - name: 编译内核 (使用 Bazel)
+      - name: 编译内核
         run: |
           cd /mnt/kernel_workspace
-          LTO=thin tools/bazel build //common:kernel_aarch64 --verbose_failures
+          # 自动设置 LTO 为 thin 以节省内存和时间
+          LTO=thin BUILD_CONFIG=common/build.config.gki.aarch64 build/build.sh
+
 
       - name: 打包 AnyKernel3
         run: |
