@@ -44,25 +44,7 @@ jobs:
           git config --global user.email "action@github.com"
           repo init -u https://android.googlesource.com/kernel/manifest -b ${{ github.event.inputs.manifest_branch }} --depth=1
           repo sync -j$(nproc) --no-clone-bundle --no-tags
-  
-      - name: 配置 ccache 接管 GKI 工具链
-        run: |
-          # 等源码同步完成后，找到工具链 clang 的实际路径
-          CLANG_DIR=$(find /mnt/kernel_workspace/prebuilts/clang -name "clang" -type f | head -1 | xargs dirname)
-          echo "找到 clang: $CLANG_DIR"
-          
-          # 用 ccache 符号链接替换工具链里的 clang
-          mkdir -p ~/ccache-bin
-          for tool in clang clang++ ld.lld; do
-            if [ -f "$CLANG_DIR/$tool" ]; then
-              ln -sf $(which ccache) ~/ccache-bin/$tool
-            fi
-          done
-          
-          # 告诉 ccache 真正的编译器在哪
-          echo "CCACHE_DIR=~/.ccache" >> $GITHUB_ENV
-          echo "CCACHE_EXEC=$CLANG_DIR/clang" >> $GITHUB_ENV  # 真正的 clang
-          echo "PATH=$HOME/ccache-bin:$CLANG_DIR:$PATH" >> $GITHUB_ENV
+        
 
       - name: 注入内核配置并禁用格式检查
         run: |
