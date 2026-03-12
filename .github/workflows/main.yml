@@ -15,56 +15,33 @@ jobs:
       - name: 强力清理磁盘空间
         run: |
           sudo docker image prune -a -f
-          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc \
-            /usr/local/share/powershell /usr/share/swift /usr/local/.ghcup /opt/pipx
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /usr/local/share/powershell /usr/share/swift /usr/local/.ghcup /opt/pipx
           sudo apt-get clean
           df -h
 
       - name: 安装依赖工具
         run: |
           sudo apt-get update
-          sudo apt-get install -y build-essential curl git python3 rsync zip ccache
+          sudo apt-get install -y build-essential curl git python3 rsync zip
           mkdir -p ~/.bin
           curl https://storage.googleapis.com/git-repo-downloads/repo > ~/.bin/repo
           chmod a+rx ~/.bin/repo
           echo "$HOME/.bin" >> $GITHUB_PATH
 
-      - name: 恢复 ccache 缓存
-        uses: actions/cache@v4
-        with:
-          path: ~/.ccache
-          key: ccache-gki-5.10-${{ github.run_id }}
-          restore-keys: |
-            ccache-gki-5.10-
-
-      - name: 恢复内核源码缓存
-        uses: actions/cache@v4
-        with:
-          path: /mnt/kernel_workspace
-          key: kernel-src-${{ github.event.inputs.manifest_branch }}
-          restore-keys: |
-            kernel-src-${{ github.event.inputs.manifest_branch }}
-
       - name: 初始化并同步源码
         run: |
-          sudo chown -R $USER /mnt
+          sudo chown $USER /mnt
           mkdir -p /mnt/kernel_workspace && cd /mnt/kernel_workspace
           git config --global user.name "GitHub Action"
           git config --global user.email "action@github.com"
-          repo init -u https://android.googlesource.com/kernel/manifest \
-            -b ${{ github.event.inputs.manifest_branch }} --depth=1
-          # 有源码缓存时只同步变更，节省大量时间
+          repo init -u https://android.googlesource.com/kernel/manifest -b ${{ github.event.inputs.manifest_branch }} --depth=1
           repo sync -j$(nproc) --no-clone-bundle --no-tags
 
       - name: 注入内核配置并禁用格式检查
         run: |
           cd /mnt/kernel_workspace/common
-          cat <<EOF >> arch/arm64/configs/gki_defconfig  
-          CONFIG_BPF_STREAM_PARSER=y                  
-          CONFIG_IP6_NF_NAT=y
-          CONFIG_IP6_NF_TARGET_MASQUERADE=y
-          CONFIG_NETFILTER_XT_TARGET_TPROXY=y
-          CONFIG_NETFILTER_XT_MATCH_SOCKET=y
+          cat <<EOF >> arch/arm64/configs/gki_defconfig
+          CONFIG_BPF_STREAM_PARSER=y
           CONFIG_NETFILTER_XT_MATCH_ADDRTYPE=y
           CONFIG_NETFILTER_XT_SET=y
           CONFIG_IP_SET=y
@@ -84,61 +61,36 @@ jobs:
           CONFIG_IP_SET_HASH_NETNET=y
           CONFIG_IP_SET_HASH_NETPORT=y
           CONFIG_IP_SET_HASH_NETIFACE=y
-          CONFIG_IP_SET_LIST_SET=y          
+          CONFIG_IP_SET_LIST_SET=y
+          CONFIG_IP6_NF_NAT=y
+          CONFIG_IP6_NF_TARGET_MASQUERADE=y
           EOF
-
+          
           sed -i 's/check_defconfig//g' build.config.gki
           sed -i 's/check_defconfig//g' build.config.common
 
-      - name: 创建 ccache wrapper 接管 GKI 工具链
-        run: |
-          mkdir -p ~/ccache-bin
-          printf '#!/bin/bash\n' > ~/ccache-bin/clang
-          printf 'REAL=$(PATH="${PATH//$HOME\\/ccache-bin:/}" which clang 2>/dev/null)\n' >> ~/ccache-bin/clang
-          printf '[ -z "$REAL" ] && echo "cannot find clang" >&2 && exit 1\n' >> ~/ccache-bin/clang
-          printf 'exec ccache "$REAL" "$@"\n' >> ~/ccache-bin/clang
-          cp ~/ccache-bin/clang ~/ccache-bin/clang++
-          sed -i 's/which clang /which clang++ /' ~/ccache-bin/clang++
-          chmod +x ~/ccache-bin/clang ~/ccache-bin/clang++
-          echo "$HOME/ccache-bin" >> $GITHUB_PATH
-
       - name: 编译内核
         run: |
-          export CCACHE_DIR=~/.ccache
-          export CCACHE_MAXSIZE=5G
-          # 用文件内容做 key，解决工具链路径每次变化导致缓存失效的问题
-          export CCACHE_COMPILERCHECK=content
-          export CCACHE_SLOPPINESS=file_stat_matches,include_file_mtime,time_macros
-          ccache -M 5G
-          ccache -z
-
           cd /mnt/kernel_workspace
           LTO=thin BUILD_CONFIG=common/build.config.gki.aarch64 build/build.sh
-
-          echo "=== CCache 命中统计 ==="
-          ccache -s
 
       - name: 打包 AnyKernel3
         run: |
           git clone https://github.com/osm0sis/AnyKernel3.git
           rm -rf AnyKernel3/.git
-
-          IMAGE_PATH=$(find /mnt/kernel_workspace/out -name "Image" \
-            -path "*/arch/arm64/boot/Image" | head -n 1)
-          echo "找到镜像: $IMAGE_PATH"
-          cp "$IMAGE_PATH" AnyKernel3/
-
+          
+          IMAGE_PATH=$(find /mnt/kernel_workspace/out -name "Image" | grep "arch/arm64/boot/Image" | head -n 1)
+          cp $IMAGE_PATH AnyKernel3/
+          
           cd AnyKernel3
-          sed -i 's/kernel.string=.*/kernel.string=Router-Monster-GKI/' anykernel.sh
-          sed -i 's/do.devicecheck=.*/do.devicecheck=0/' anykernel.sh
-          sed -i 's|block=.*|block=/dev/block/by-name/boot;|' anykernel.sh
-          sed -i 's/is_slot_device=.*/is_slot_device=auto;/' anykernel.sh
-
-          # 打包文件名要和下面上传的 path 保持一致
+          sed -i 's/kernel.string=.*/kernel.string=Pure GKI 5.10.218 No-Root/' anykernel.sh
+          sed -i 's/^do.devicecheck=.*/do.devicecheck=0/' anykernel.sh
+          sed -i 's/^block=.*/block=auto;/' anykernel.sh
+          sed -i 's/^is_slot_device=.*/is_slot_device=0;/' anykernel.sh
           zip -r9 ../AnyKernel3-GKI-5.10.218.zip *
 
-      - name: 上传产物
+      - name: 提取并上传产物
         uses: actions/upload-artifact@v4
         with:
-          name: AnyKernel3-GKI-5.10.218-Router
+          name: AnyKernel3-GKI-5.10.218-NoRoot
           path: AnyKernel3-GKI-5.10.218.zip
