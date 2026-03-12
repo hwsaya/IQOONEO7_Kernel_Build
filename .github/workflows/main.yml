@@ -28,7 +28,7 @@ jobs:
           chmod a+rx ~/.bin/repo
           echo "$HOME/.bin" >> $GITHUB_PATH
 
-      - name: 初始化并同步源码 (在 /mnt 编译)
+      - name: 初始化并同步源码
         run: |
           sudo chown $USER /mnt
           mkdir -p /mnt/kernel_workspace && cd /mnt/kernel_workspace
@@ -37,7 +37,7 @@ jobs:
           repo init -u https://android.googlesource.com/kernel/manifest -b ${{ github.event.inputs.manifest_branch }} --depth=1
           repo sync -j$(nproc) --no-clone-bundle --no-tags
 
-      - name: 注入内核配置
+      - name: 注入内核配置并禁用格式检查
         run: |
           cd /mnt/kernel_workspace/common
           cat <<EOF >> arch/arm64/configs/gki_defconfig
@@ -65,29 +65,30 @@ jobs:
           CONFIG_IP6_NF_NAT=y
           CONFIG_IP6_NF_TARGET_MASQUERADE=y
           EOF
-
+          
           sed -i 's/check_defconfig//g' build.config.gki
           sed -i 's/check_defconfig//g' build.config.common
 
       - name: 编译内核
         run: |
           cd /mnt/kernel_workspace
-          # 自动设置 LTO 为 thin 以节省内存和时间
           LTO=thin BUILD_CONFIG=common/build.config.gki.aarch64 build/build.sh
-
 
       - name: 打包 AnyKernel3
         run: |
           git clone https://github.com/osm0sis/AnyKernel3.git
           rm -rf AnyKernel3/.git
-          cp /mnt/kernel_workspace/bazel-bin/common/kernel_aarch64/Image AnyKernel3/
+          
+          IMAGE_PATH=$(find /mnt/kernel_workspace/out -name "Image" | grep "arch/arm64/boot/Image" | head -n 1)
+          cp $IMAGE_PATH AnyKernel3/
+          
           cd AnyKernel3
           sed -i 's/kernel.string=.*/kernel.string=Pure GKI 5.10.218 No-Root/' anykernel.sh
           sed -i 's/do.devicecheck=1/do.devicecheck=0/' anykernel.sh
           sed -i 's/block=.*/block=boot;/' anykernel.sh
           zip -r9 ../AnyKernel3-GKI-5.10.218.zip *
 
-      - name: 上传产物
+      - name: 提取并上传产物
         uses: actions/upload-artifact@v4
         with:
           name: AnyKernel3-GKI-5.10.218-NoRoot
