@@ -59,10 +59,7 @@ jobs:
       - name: 注入内核配置并禁用格式检查
         run: |
           cd /mnt/kernel_workspace/common
-          cat <<EOF >> arch/arm64/configs/gki_defconfig          
-          CONFIG_IP_ADVANCED_ROUTER=y
-          CONFIG_IP_MULTIPLE_TABLES=y
-          CONFIG_IP_ROUTE_MULTIPATH=y
+          cat <<EOF >> arch/arm64/configs/gki_defconfig                    
           CONFIG_IP6_NF_NAT=y
           CONFIG_IP6_NF_TARGET_MASQUERADE=y
           CONFIG_NETFILTER_XT_TARGET_TPROXY=y
