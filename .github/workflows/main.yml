@@ -59,7 +59,7 @@ jobs:
       - name: 注入内核配置并禁用格式检查
         run: |
           cd /mnt/kernel_workspace/common
-          cat <<EOF >> arch/arm64/configs/gki_defconfig          
+          cat <<EOF >> arch/arm64/configs/gki_defconfig
           CONFIG_NET_SCH_FQ_CODEL=y
           CONFIG_NET_SCH_CAKE=y
           CONFIG_BPF_STREAM_PARSER=y
@@ -94,7 +94,7 @@ jobs:
           CONFIG_NET_RX_BUSY_POLL=y
           CONFIG_XPS=y
           CONFIG_RPS=y
-          EOF          
+          EOF
 
           sed -i 's/check_defconfig//g' build.config.gki
           sed -i 's/check_defconfig//g' build.config.common
