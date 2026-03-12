@@ -98,10 +98,6 @@ jobs:
 
           sed -i 's/check_defconfig//g' build.config.gki
           sed -i 's/check_defconfig//g' build.config.common
-          sed -i 's/check_abi//g' build.config.gki
-          sed -i 's/check_abi//g' build.config.common
-          # 清空 ABI 符号表，一次性跳过所有符号检查
-          echo "" > android/abi_gki_aarch64_generic
 
       - name: 创建 ccache wrapper 接管 GKI 工具链
         run: |
