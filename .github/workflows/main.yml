@@ -107,24 +107,13 @@ jobs:
 
       - name: 创建 ccache wrapper 接管 GKI 工具链
         run: |
-          # GKI 的 clang 是 build.sh 运行时才下载的，路径提前不可知
-          # 用动态 wrapper：被调用时从 PATH 里找真正的 clang，再通过 ccache 执行
           mkdir -p ~/ccache-bin
-
-          cat > ~/ccache-bin/clang << 'WRAPPER'
-#!/bin/bash
-REAL=$(PATH="${PATH//$HOME\/ccache-bin:/}" which clang 2>/dev/null)
-[ -z "$REAL" ] && echo "ccache wrapper: cannot find real clang" >&2 && exit 1
-exec ccache "$REAL" "$@"
-WRAPPER
-
-          cat > ~/ccache-bin/clang++ << 'WRAPPER'
-#!/bin/bash
-REAL=$(PATH="${PATH//$HOME\/ccache-bin:/}" which clang++ 2>/dev/null)
-[ -z "$REAL" ] && exec ccache clang++ "$@"
-exec ccache "$REAL" "$@"
-WRAPPER
-
+          printf '#!/bin/bash\n' > ~/ccache-bin/clang
+          printf 'REAL=$(PATH="${PATH//$HOME\\/ccache-bin:/}" which clang 2>/dev/null)\n' >> ~/ccache-bin/clang
+          printf '[ -z "$REAL" ] && echo "cannot find clang" >&2 && exit 1\n' >> ~/ccache-bin/clang
+          printf 'exec ccache "$REAL" "$@"\n' >> ~/ccache-bin/clang
+          cp ~/ccache-bin/clang ~/ccache-bin/clang++
+          sed -i 's/which clang /which clang++ /' ~/ccache-bin/clang++
           chmod +x ~/ccache-bin/clang ~/ccache-bin/clang++
           echo "$HOME/ccache-bin" >> $GITHUB_PATH
 
