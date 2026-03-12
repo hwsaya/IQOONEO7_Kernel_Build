@@ -12,7 +12,7 @@ jobs:
   build-kernel:
     runs-on: ubuntu-latest
     steps:
-      - name: 清理磁盘空间
+      - name: 清理磁盘空间 
         uses: easimon/maximize-build-space@master
         with:
           root-reserve-mb: 8192
